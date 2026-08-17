@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "category": "PROTEIN & FITNESS",
+    "title": "Egg vs Almonds: Ultimate Protein Showdown!",
+    "item_a_label": "1 WHOLE EGG",
+    "item_a_val": "6g Protein",
+    "item_b_label": "100g ALMONDS",
+    "item_b_val": "21g Protein",
+    "image_name": "protein_01.png",
+    "audio_name": "bg_music_01.mp3",
+    "pinned_comment": "Which protein source do you rely on daily? Comment below!"
+  },
+  {
+    "id": 2,
+    "category": "VITAMINS & IMMUNITY",
+    "title": "Guava vs Orange: Vitamin C Shock!",
+    "item_a_label": "1 GUAVA",
+    "item_a_val": "228mg Vit C",
+    "item_b_label": "1 ORANGE",
+    "item_b_val": "53mg Vit C",
+    "image_name": "vitamin_01.png",
+    "audio_name": "bg_music_01.mp3",
+    "pinned_comment": "Did you know Guava has 4x more Vitamin C than an Orange?"
+  },
+  {
+    "id": 3,
+    "category": "DAILY ENERGY BOOST",
+    "title": "Banana vs Energy Drink: Natural Fuel!",
+    "item_a_label": "1 BANANA",
+    "item_a_val": "Natural Energy",
+    "item_b_label": "1 CAN ENERGY DRINK",
+    "item_b_val": "Sugar Crash",
+    "image_name": "energy_01.png",
+    "audio_name": "bg_music_01.mp3",
+    "pinned_comment": "Natural fuel or artificial energy? Which one do you choose?"
+  }
+]
