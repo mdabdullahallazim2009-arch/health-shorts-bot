@@ -15,6 +15,16 @@ jobs:
         with:
           python-version: '3.9'
       - name: Install dependencies
-        run: pip install Pillow
+        run: |
+          pip install Pillow
+          sudo apt update
+          sudo apt install ffmpeg
       - name: Run Code
         run: python main.py
+      
+      # ভিডিওটি সেভ করার জন্য এই অংশটি যোগ করা হয়েছে
+      - name: Upload Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-video
+          path: output/final_video.mp4
