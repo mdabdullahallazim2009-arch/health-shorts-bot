@@ -1,42 +1,97 @@
-
 import json
 import os
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
+from moviepy.editor import ImageClip, AudioFileClip
 
-# ১. ডাটা লোড করা
-with open('data.json', 'r') as f:
-    data = json.load(f)
+QUEUE_FILE = "data_queue.json"
+IMAGE_OUTPUT = "current_frame.png"
+VIDEO_OUTPUT = "youtube_short.mp4"
+AUDIO_FILE = "bg_music_01.mp3"  # আপনার রিপোজিটরির মিউজিক ফাইল
 
-item = data[0]
+# ১. ডাটা ক্যু থেকে রিড করা
+def get_pending_item():
+    if not os.path.exists(QUEUE_FILE):
+        raise FileNotFoundError(f"{QUEUE_FILE} ফাইলটি পাওয়া যায়নি!")
+    
+    with open(QUEUE_FILE, "r", encoding="utf-8") as f:
+        data_list = json.load(f)
 
-# ২. ১০৮০x১৯২০ ফুল এইচডি শর্টস ক্যানভাস তৈরি
-target_w, target_h = 1080, 1920
-bg_img = Image.open('protein_01.png').convert('RGB')
-bg_img = bg_img.resize((target_w, target_h))
+    for item in data_list:
+        if item.get("status") == "pending":
+            return item, data_list
+    return None, data_list
 
-draw = ImageDraw.Draw(bg_img)
+# ২. ৩টি ক্যারোসেল ডটসহ ইনফোগ্রাফিক ইমেজ তৈরি
+def generate_image(data):
+    width, height = 1080, 1920
+    img = Image.new("RGB", (width, height), color=(248, 250, 252))
+    draw = ImageDraw.Draw(img)
 
-# ৩. সাইন্টিফিক টেক্সট লেআউট বসানো
-# বোল্ড ক্যাটাগরি হেডার
-draw.text((target_w // 2, 250), item['category'], fill='#FFD700', anchor="mm")
+    try:
+        title_font = ImageFont.truetype("arial.ttf", 55)
+        card_font = ImageFont.truetype("arial.ttf", 45)
+        text_font = ImageFont.truetype("arial.ttf", 32)
+    except IOError:
+        title_font = card_font = text_font = ImageFont.load_default()
 
-# টাইটেল ও নিউট্রিয়েন্ট তথ্য
-draw.text((target_w // 2, 450), item['title'], fill='#FFFFFF', anchor="mm")
-draw.text((target_w // 2, 850), f"{item['item_a_label']} : {item['item_a_val']}", fill='#00FF66', anchor="mm")
-draw.text((target_w // 2, 1050), f"{item['item_b_label']} : {item['item_b_val']}", fill='#FF4444', anchor="mm")
+    # Category Title
+    draw.text((width // 2, 220), data["category"], fill=(15, 23, 42), font=title_font, anchor="mm")
 
-# ৪. ক্যারোসেল ডটস (Bottom Growth Hack)
-dot_y, dot_r, spacing = 1750, 12, 40
-start_x = (target_w // 2) - (1.5 * spacing)
+    # 3 Good/Better/Best Cards
+    ranks = [data["good"], data["better"], data["best"]]
+    card_colors = [(241, 245, 249), (226, 232, 240), (254, 240, 138)]
+    start_y, card_height, card_width, gap = 400, 360, 920, 50
 
-for i in range(4):
-    x = start_x + (i * spacing)
-    color = '#FFD700' if i == 0 else '#777777' # প্রথম ডটটি একটিভ থাকবে
-    draw.ellipse([x - dot_r, dot_y - dot_r, x + dot_r, dot_y + dot_r], fill=color)
+    for i, rank_data in enumerate(ranks):
+        y1 = start_y + i * (card_height + gap)
+        y2 = y1 + card_height
+        x1 = (width - card_width) // 2
+        x2 = x1 + card_width
 
-# ৫. ফ্রেম ও ৭ সেকেন্ডের HD MP4 ভিডিও তৈরি
-os.makedirs('output', exist_ok=True)
-bg_img.save('output/final_frame.png')
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=28, fill=card_colors[i], outline=(203, 213, 225), width=2)
+        draw.text((x1 + 45, y1 + 75), f"{rank_data['rank']} - {rank_data['name']}", fill=(15, 23, 42), font=card_font)
+        draw.text((x1 + 45, y1 + 175), rank_data["highlight"], fill=(51, 65, 85), font=text_font)
 
-os.system("ffmpeg -y -loop 1 -i output/final_frame.png -i bg_music_01.mp3 -c:v libx264 -t 7 -pix_fmt yuv420p -shortest output/final_video.mp4")
-print("Scientific Shorts Video Created Successfully!")
+    # 3 Carousel Dots (1st Active)
+    dot_y, dot_radius, dot_gap = height - 180, 14, 35
+    total_dots_width = (3 * dot_radius * 2) + (2 * dot_gap)
+    dot_start_x = (width - total_dots_width) // 2
+
+    for i in range(3):
+        cx = dot_start_x + i * (dot_radius * 2 + dot_gap) + dot_radius
+        color = (37, 99, 235) if i == 0 else (203, 213, 225)
+        draw.ellipse([cx - dot_radius, dot_y - dot_radius, cx + dot_radius, dot_y + dot_radius], fill=color)
+
+    img.save(IMAGE_OUTPUT)
+
+# ৩. ইমেজ + bg_music_01.mp3 দিয়ে ৬ সেকেন্ডের ভিডিও তৈরি
+def generate_video():
+    video_clip = ImageClip(IMAGE_OUTPUT).set_duration(6)
+    
+    # Audio integration
+    if os.path.exists(AUDIO_FILE):
+        audio_clip = AudioFileClip(AUDIO_FILE).subclip(0, 6)  # প্রথম ৬ সেকেন্ডের ব্যাকগ্রাউন্ড মিউজিক
+        video_clip = video_clip.set_audio(audio_clip)
+    
+    video_clip.write_videofile(VIDEO_OUTPUT, fps=24, codec="libx264", audio_codec="aac")
+
+# ৪. ডাটা স্ট্যাটাস আপডেট
+def update_queue(used_item, data_list):
+    for item in data_list:
+        if item["id"] == used_item["id"]:
+            item["status"] = "uploaded"
+            break
+    with open(QUEUE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data_list, f, indent=2)
+
+if __name__ == "__main__":
+    current_item, full_data = get_pending_item()
+    if current_item:
+        print(f"Processing ID {current_item['id']}: {current_item['category']}")
+        generate_image(current_item)
+        generate_video()
+        update_queue(current_item, full_data)
+        print("Success: Video generated with audio!")
+
+
+
