@@ -1,62 +1,81 @@
-import json
+
 import os
-from PIL import Image, ImageDraw, ImageFont
+import requests
+from moviepy.editor import TextClip, CompositeVideoClip, ColorClip
+from moviepy.video.fx.all import fadein
 
-def generate_video_frame():
-    # ১. ডাটা ফাইল লোড
-    if not os.path.exists('data.json'):
-        print("Error: data.json not found!")
-        return
+# ১. ভিডিও সেটিংস (2K / 30 FPS)
+WIDTH, HEIGHT = 1440, 2560
+FPS = 30
+DURATION = 6.0
 
-    with open('data.json', 'r', encoding='utf-8') as f:
-        data = json.load(f)
+# ২. টেলিগ্রাম বোট সেটিংস (আপনার বোটের তথ্য দিন)
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
 
-    # পেন্ডিং কন্টেন্ট নির্বাচন
-    item = next((x for x in data if x.get('status') == 'pending'), None)
+def send_to_telegram(video_path, caption):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+    with open(video_path, 'rb') as video:
+        payload = {'chat_id': CHAT_ID, 'caption': caption}
+        files = {'video': video}
+        requests.post(url, data=payload, files=files)
 
-    if not item:
-        print("No pending topics found in data.json!")
-        return
+def create_short(quote_text, output_name):
+    # ডার্ক ব্যাকগ্রাউন্ড + স্লাইট জুম
+    bg = ColorClip(size=(WIDTH, HEIGHT), color=(10, 10, 10), duration=DURATION)
+    bg = bg.resize(lambda t: 1 + 0.02 * t)
 
-    # ২. ক্যানভাস সাইজ (ইউটিউব শর্টস ১০৮০x১৯২০)
-    width, height = 1080, 1920
-    img = Image.new('RGB', (width, height), color='#0F172A')
-    draw = ImageDraw.Draw(img)
+    # ওয়ার্ড-বাই-ওয়ার্ড টেক্সট অ্যানিমেশন
+    words = quote_text.split()
+    time_per_word = (DURATION - 1.5) / max(len(words), 1)
+    text_clips = []
+    accumulated_text = ""
 
-    # ফন্ট সেটআপ (Montserrat/Poppins না থাকলে সিস্টেমের ডিফল্ট ফন্ট ব্যবহার করবে)
-    try:
-        font_hook = ImageFont.truetype("font.ttf", 52)
-        font_card = ImageFont.truetype("font.ttf", 42)
-    except:
-        font_hook = font_card = ImageFont.load_default()
+    for i, word in enumerate(words):
+        accumulated_text += word + " "
+        start_time = i * time_per_word
+        
+        txt_clip = TextClip(
+            accumulated_text.strip(),
+            fontsize=75,
+            color='white',
+            font='font.ttf',  # আপনার গিটহাবের ফন্ট
+            method='caption',
+            size=(WIDTH - 200, None),
+            align='center'
+        ).set_start(start_time).set_duration(DURATION - start_time).set_position('center').fx(fadein, 0.15)
+        
+        text_clips.append(txt_clip)
 
-    # ৩. কার্ড ও টেক্সট রেন্ডারিং
-    # মূল প্রশ্ন / হুক
-    draw.text((width // 2, 350), item['hook'], fill="#F8FAFC", font=font_hook, anchor="mm")
+    # বটম থ্রি-ডট (...)
+    dots = TextClip("•  •  •", fontsize=50, color='gray', font='font.ttf')\
+           .set_position((WIDTH // 2 - 50, HEIGHT - 250))\
+           .set_duration(DURATION)\
+           .set_opacity(0.6)
 
-    # কার্ড ১: GOOD (🥉 Bronze Border)
-    draw.rounded_rectangle([90, 600, 990, 780], radius=24, fill="#1E293B", outline="#475569", width=3)
-    draw.text((width // 2, 690), item['good'], fill="#CBD5E1", font=font_card, anchor="mm")
+    # রেন্ডার
+    final_video = CompositeVideoClip([bg] + text_clips + [dots], size=(WIDTH, HEIGHT)).set_duration(DURATION)
+    final_video.write_videofile(output_name, fps=FPS, codec='libx264', audio=False, preset='ultrafast')
 
-    # কার্ড ২: BETTER (🥈 Cyan Border)
-    draw.rounded_rectangle([90, 850, 990, 1030], radius=24, fill="#1E293B", outline="#38BDF8", width=4)
-    draw.text((width // 2, 940), item['better'], fill="#38BDF8", font=font_card, anchor="mm")
-
-    # কার্ড ৩: BEST / WINNER (🥇 Golden Glow Border)
-    draw.rounded_rectangle([80, 1100, 1000, 1340], radius=30, fill="#1E293B", outline="#FACC15", width=8)
-    draw.text((width // 2, 1220), item['best'], fill="#FACC15", font=font_card, anchor="mm")
-
-    # ৪. ইমেজ সেভ করা
-    img.save("final_frame.png")
-    print(f"Successfully generated frame for Topic ID: {item['id']}")
-
-    # ৫. ডাটা আপডেট করা (pending -> done)
-    item['status'] = 'done'
-    with open('data.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+# ১২টি ভিডিও তৈরি ও টেলিগ্রামে পাঠানো
+def main():
+    if os.path.exists('data.json'):
+        # JSON বা TXT থেকে কোট পড়া
+        import json
+        with open('data.json', 'r', encoding='utf-8') as f:
+            quotes = json.load(f)  # লিস্ট আকারে থাকবে
+            
+        for i, quote in enumerate(quotes[:12]):
+            video_name = f"short_{i+1}.mp4"
+            create_short(quote, video_name)
+            
+            # টেলিগ্রামে অটো-সেন্ড
+            caption = f"{quote}\n\n#Attitude #Quotes #Motivation #Shorts"
+            send_to_telegram(video_name, caption)
+            print(f"Video {i+1} sent to Telegram!")
 
 if __name__ == "__main__":
-    generate_video_frame()
+    main()
 
 
 
