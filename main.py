@@ -1,15 +1,14 @@
 import os
 import requests
 import json
-from moviepy.editor import TextClip, CompositeVideoClip, ColorClip
-from moviepy.video.fx.all import fadein
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from moviepy.editor import ImageClip
 
-# ১. টেলিগ্রাম বোট সেটিংস
 BOT_TOKEN = "8919388077:AAEbXtcd_4FE6VNrp-N9HgKpe_niRrW3tqM"
 CHAT_ID = "-1004368928162"
 
-# ২. ভিডিও সেটিংস (2K Resolution)
-WIDTH, HEIGHT = 1440, 2560
+WIDTH, HEIGHT = 1080, 1920
 FPS = 30
 DURATION = 6.0
 
@@ -18,39 +17,46 @@ def send_to_telegram(video_path, caption):
     with open(video_path, 'rb') as video:
         payload = {'chat_id': CHAT_ID, 'caption': caption}
         files = {'video': video}
-        response = requests.post(url, data=payload, files=files)
-        return response
+        return requests.post(url, data=payload, files=files)
+
+def create_text_image(text):
+    img = Image.new('RGB', (WIDTH, HEIGHT), color=(10, 10, 10))
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        font = ImageFont.truetype('font.ttf', 55)
+    except:
+        font = ImageFont.load_default()
+
+    words = text.split()
+    lines, current_line = [], []
+    for word in words:
+        current_line.append(word)
+        bbox = draw.textbbox((0, 0), " ".join(current_line), font=font)
+        if bbox[2] > WIDTH - 160:
+            current_line.pop()
+            lines.append(" ".join(current_line))
+            current_line = [word]
+    if current_line:
+        lines.append(" ".join(current_line))
+    
+    full_text = "\n".join(lines)
+    bbox = draw.multiline_textbbox((0, 0), full_text, font=font, align="center")
+    x = (WIDTH - (bbox[2] - bbox[0])) // 2
+    y = (HEIGHT - (bbox[3] - bbox[1])) // 2
+    
+    draw.multiline_text((x, y), full_text, fill=(255, 255, 255), font=font, align="center")
+    
+    dots = "•  •  •"
+    d_bbox = draw.textbbox((0, 0), dots, font=font)
+    draw.text(((WIDTH - (d_bbox[2] - d_bbox[0])) // 2, HEIGHT - 220), dots, fill=(130, 130, 130), font=font)
+
+    return np.array(img)
 
 def create_short(quote_text, output_name):
-    bg = ColorClip(size=(WIDTH, HEIGHT), color=(10, 10, 10), duration=DURATION)
-    bg = bg.resize(lambda t: 1 + 0.02 * t)
-
-    words = quote_text.split()
-    time_per_word = (DURATION - 1.5) / max(len(words), 1)
-    text_clips = []
-    accumulated_text = ""
-
-    for i, word in enumerate(words):
-        accumulated_text += word + " "
-        start_time = i * time_per_word
-        txt_clip = TextClip(
-            accumulated_text.strip(),
-            fontsize=75,
-            color='white',
-            font='font.ttf', 
-            method='caption',
-            size=(WIDTH - 200, None),
-            align='center'
-        ).set_start(start_time).set_duration(DURATION - start_time).set_position('center').fx(fadein, 0.15)
-        text_clips.append(txt_clip)
-
-    dots = TextClip("•  •  •", fontsize=50, color='gray', font='font.ttf')\
-           .set_position((WIDTH // 2 - 50, HEIGHT - 250))\
-           .set_duration(DURATION)\
-           .set_opacity(0.6)
-
-    final_video = CompositeVideoClip([bg] + text_clips + [dots], size=(WIDTH, HEIGHT)).set_duration(DURATION)
-    final_video.write_videofile(output_name, fps=FPS, codec='libx264', audio=False, preset='ultrafast')
+    frame_np = create_text_image(quote_text)
+    clip = ImageClip(frame_np).set_duration(DURATION)
+    clip.write_videofile(output_name, fps=FPS, codec='libx264', audio=False, preset='ultrafast')
 
 def main():
     if os.path.exists('data.json'):
